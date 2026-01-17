@@ -38,10 +38,53 @@ app.post(
             error: "Both oldDoc and newDoc files are required",
         });
       }
+       
+      try {
+        // Read file buffers
+        const oldDocBuffer = req.files.oldDoc[0].buffer;
+        const newDocBuffer = req.files.newDoc[0].buffer;
 
-      res.json({
-        status: "ok",
-      });
+        // Convert to text
+        const oldDocText = oldDocBuffer.toString("utf-8");
+        const newDocText = newDocBuffer.toString("utf-8");
+
+        // Normalize text
+        const normalizeText = (text) => 
+            text
+              .toLowerCase()
+              .replace(/\r\n/g, "\n")
+              .replace(/\n{2,}/g, "\n\n")
+              .trim();
+
+        const normalizedOld = normalizeText(oldDocText);
+        const normalizedNew = normalizeText(newDocText);
+
+        // Split into clauses (paragraph-based)
+        const splitIntoClauses = (text) =>
+            text
+              .split("/\n\s*\n|\n/g") // Split on blank lines OR single newLines.
+              .map((clause) => clause.trim())
+              .filter((clause) => clause.length > 0)
+              .map((clause, index) => ({
+                id: index + 1,
+                text: clause,
+              }));
+
+        const oldDocClauses = splitIntoClauses(normalizedOld);
+        const newDocClauses = splitIntoClauses(normalizedNew);
+
+        // Return structured response
+        res.json({
+            oldDocClauses,
+            newDocClauses,
+        });
+        
+      }catch(error){
+        console.error("Clause extraction error:", error);
+        res.status(500).json({
+            error: "Failed to process documents.",
+        });
+      }
     }
 );
 
