@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import multer from "multer";
+import { semanticDiff } from "./ml/semanticDiff.js";
 
 dotenv.config();
 
@@ -19,75 +20,75 @@ const upload = multer({ storage: multer.memoryStorage() });
  * Health check
  */
 app.get("/health", (req, res) => {
-    res.json({ status: "healthy" });
+  res.json({ status: "healthy" });
 });
 
 /**
- * Mock document analysis endpoint
+ * Document analysis endpoint (Phase 3)
  */
 app.post(
-    "/api/analyze-docs",
-    upload.fields([
-        { name: "oldDoc", maxCount: 1 },
-        { name: "newDoc", maxCount: 1 },
-    ]),
-    (req, res) => {
-      // For now just confirm files arrived
-      if (!req.files?.oldDoc || !req.files?.newDoc){
-        return res.status(400).json({
-            error: "Both oldDoc and newDoc files are required",
-        });
-      }
-       
-      try {
-        // Read file buffers
-        const oldDocBuffer = req.files.oldDoc[0].buffer;
-        const newDocBuffer = req.files.newDoc[0].buffer;
-
-        // Convert to text
-        const oldDocText = oldDocBuffer.toString("utf-8");
-        const newDocText = newDocBuffer.toString("utf-8");
-
-        // Normalize text
-        const normalizeText = (text) => 
-            text
-              .toLowerCase()
-              .replace(/\r\n/g, "\n")
-              .replace(/\n{2,}/g, "\n\n")
-              .trim();
-
-        const normalizedOld = normalizeText(oldDocText);
-        const normalizedNew = normalizeText(newDocText);
-
-        // Split into clauses (paragraph-based)
-        const splitIntoClauses = (text) =>
-            text
-              .split("/\n\s*\n|\n/g") // Split on blank lines OR single newLines.
-              .map((clause) => clause.trim())
-              .filter((clause) => clause.length > 0)
-              .map((clause, index) => ({
-                id: index + 1,
-                text: clause,
-              }));
-
-        const oldDocClauses = splitIntoClauses(normalizedOld);
-        const newDocClauses = splitIntoClauses(normalizedNew);
-
-        // Return structured response
-        res.json({
-            oldDocClauses,
-            newDocClauses,
-        });
-        
-      }catch(error){
-        console.error("Clause extraction error:", error);
-        res.status(500).json({
-            error: "Failed to process documents.",
-        });
-      }
+  "/api/analyze-docs",
+  upload.fields([
+    { name: "oldDoc", maxCount: 1 },
+    { name: "newDoc", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    if (!req.files?.oldDoc || !req.files?.newDoc) {
+      return res.status(400).json({
+        error: "Both oldDoc and newDoc files are required",
+      });
     }
+
+    try {
+      // 1️⃣ Read file buffers
+      const oldDocBuffer = req.files.oldDoc[0].buffer;
+      const newDocBuffer = req.files.newDoc[0].buffer;
+
+      // 2️⃣ Convert to text
+      const oldDocText = oldDocBuffer.toString("utf-8");
+      const newDocText = newDocBuffer.toString("utf-8");
+
+      // 3️⃣ Normalize text
+      const normalizeText = (text) =>
+        text
+          .toLowerCase()
+          .replace(/\r\n/g, "\n")
+          .replace(/\n{2,}/g, "\n\n")
+          .trim();
+
+      const normalizedOld = normalizeText(oldDocText);
+      const normalizedNew = normalizeText(newDocText);
+
+      // 4️⃣ Split into clauses (blank lines OR single lines)
+      const splitIntoClauses = (text) =>
+        text
+          .split(/\n\s*\n|\n/g)
+          .map((clause) => clause.trim())
+          .filter((clause) => clause.length > 0)
+          .map((clause, index) => ({
+            id: index + 1,
+            text: clause,
+          }));
+
+      const oldDocClauses = splitIntoClauses(normalizedOld);
+      const newDocClauses = splitIntoClauses(normalizedNew);
+
+      // 5️⃣ Semantic Diff (ML)
+      const diffs = await semanticDiff(oldDocClauses, newDocClauses);
+
+      // 6️⃣ Return semantic diff
+      res.json({
+        diffs,
+      });
+    } catch (error) {
+      console.error("Semantic diff error:", error);
+      res.status(500).json({
+        error: "Failed to analyze documents",
+      });
+    }
+  }
 );
 
 app.listen(PORT, () => {
-    console.log(`Backend running on http://localhost:${PORT}`);
+  console.log(`🚀 Backend running on http://localhost:${PORT}`);
 });
