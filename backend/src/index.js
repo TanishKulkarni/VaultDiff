@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import multer from "multer";
 import { semanticDiff } from "./ml/semanticDiff.js";
+import { detectRisk } from "./ml/riskEngine.js";
 
 dotenv.config();
 
@@ -77,9 +78,26 @@ app.post(
       const diffs = await semanticDiff(oldDocClauses, newDocClauses);
 
       // 6️⃣ Return semantic diff
-      res.json({
-        diffs,
+      const diffsWithRisk = diffs.map(diff => {
+        if(diff.change_type === "modified" || diff.change_type === "added"){
+          const clauseText = 
+            diff.newClause?.text || diff.oldClause?.text || "";
+
+          const risk = detectRisk(clauseText);
+
+          return {
+            ...diff,
+            risk
+          };
+        }
+
+        return diff;
       });
+
+      res.json({
+        diffs: diffsWithRisk
+      });
+      
     } catch (error) {
       console.error("Semantic diff error:", error);
       res.status(500).json({
