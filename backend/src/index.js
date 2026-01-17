@@ -2,8 +2,10 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import multer from "multer";
+
 import { semanticDiff } from "./ml/semanticDiff.js";
 import { detectRisk } from "./ml/riskEngine.js";
+import { explainRisk } from "./ml/explainRisk.js";
 
 dotenv.config();
 
@@ -25,7 +27,7 @@ app.get("/health", (req, res) => {
 });
 
 /**
- * Document analysis endpoint (Phase 3)
+ * Document analysis endpoint
  */
 app.post(
   "/api/analyze-docs",
@@ -45,7 +47,7 @@ app.post(
       const oldDocBuffer = req.files.oldDoc[0].buffer;
       const newDocBuffer = req.files.newDoc[0].buffer;
 
-      // 2️⃣ Convert to text
+      // 2️⃣ Convert buffers to text
       const oldDocText = oldDocBuffer.toString("utf-8");
       const newDocText = newDocBuffer.toString("utf-8");
 
@@ -60,7 +62,7 @@ app.post(
       const normalizedOld = normalizeText(oldDocText);
       const normalizedNew = normalizeText(newDocText);
 
-      // 4️⃣ Split into clauses (blank lines OR single lines)
+      // 4️⃣ Split into clauses
       const splitIntoClauses = (text) =>
         text
           .split(/\n\s*\n|\n/g)
@@ -74,32 +76,46 @@ app.post(
       const oldDocClauses = splitIntoClauses(normalizedOld);
       const newDocClauses = splitIntoClauses(normalizedNew);
 
-      // 5️⃣ Semantic Diff (ML)
+      // 5️⃣ Semantic diff (ML)
       const diffs = await semanticDiff(oldDocClauses, newDocClauses);
 
-      // 6️⃣ Return semantic diff
-      const diffsWithRisk = diffs.map(diff => {
-        if(diff.change_type === "modified" || diff.change_type === "added"){
-          const clauseText = 
-            diff.newClause?.text || diff.oldClause?.text || "";
+      // 6️⃣ Risk detection + Zero-Trust LLM explanation
+      const diffsWithRisk = await Promise.all(
+        diffs.map(async (diff) => {
+          if (diff.change_type === "modified" || diff.change_type === "added") {
+            const clauseText =
+              diff.newClause?.text || diff.oldClause?.text || "";
 
-          const risk = detectRisk(clauseText);
+            const risk = detectRisk(clauseText);
 
-          return {
-            ...diff,
-            risk
-          };
-        }
+            if (risk.risk_level !== "low") {
+              const explanation = await explainRisk(risk);
 
-        return diff;
-      });
+              return {
+                ...diff,
+                risk: {
+                  ...risk,
+                  explanation,
+                },
+              };
+            }
 
+            return {
+              ...diff,
+              risk,
+            };
+          }
+
+          return diff;
+        })
+      );
+
+      // 7️⃣ Final response
       res.json({
-        diffs: diffsWithRisk
+        diffs: diffsWithRisk,
       });
-      
     } catch (error) {
-      console.error("Semantic diff error:", error);
+      console.error("Document analysis error:", error);
       res.status(500).json({
         error: "Failed to analyze documents",
       });
