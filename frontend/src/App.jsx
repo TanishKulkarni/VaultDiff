@@ -4,6 +4,7 @@ import AnalyzeButton from "./components/AnalyzeButton";
 import LoadingState from "./components/LoadingState";
 import RiskDashboard from "./components/results/RiskDashboard";
 import DiffList from "./components/results/DiffList";
+import SecurityPanel from "./components/SecurityPanel";
 
 function App() {
   const [oldDoc, setOldDoc] = useState(null);
@@ -64,6 +65,8 @@ function App() {
           <DiffList diffs={result.diffs} />
         </>
       )}
+
+      <SecurityPanel />
 
     </div>
   );
