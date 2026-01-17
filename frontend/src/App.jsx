@@ -2,6 +2,8 @@ import { useState } from "react";
 import FileUploader from "./components/FileUploader";
 import AnalyzeButton from "./components/AnalyzeButton";
 import LoadingState from "./components/LoadingState";
+import RiskDashboard from "./components/results/RiskDashboard";
+import DiffList from "./components/results/DiffList";
 
 function App() {
   const [oldDoc, setOldDoc] = useState(null);
@@ -57,10 +59,12 @@ function App() {
       {error && <p style={{ color: "red" }}>{error}</p>}
 
       {result && (
-        <pre style={{ marginTop: "2rem", background: "#f5f5f5", padding: "1rem" }}>
-          {JSON.stringify(result, null, 2)}
-        </pre>
+        <>
+          <RiskDashboard diffs={result.diffs} />
+          <DiffList diffs={result.diffs} />
+        </>
       )}
+
     </div>
   );
 }
